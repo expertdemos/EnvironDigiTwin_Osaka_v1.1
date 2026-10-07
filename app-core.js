@@ -1,5 +1,5 @@
 "use strict";
-/* Osaka Air Quality Digital Twin - Art of the Possible - core (v5)
+/* Osaka Air Quality Digital Twin - Art of the Possible - core (v11)
    Four data options:
      Official  - Ministry of the Environment stations, collected every 30 min by the GitHub Action (needs deployment)
      Blended   - official stations + Open-Meteo model points in gaps and for the forecast (falls back to Open-Meteo on desktop)
@@ -12,9 +12,9 @@ const IS_FILE = location.protocol === "file:";
 const state = { lang: "en", view: "blend", autoSample: false, note: null, screen: "home", area: "all", pol: "pm25", basemap: "esrigray", surfaceOpacity: .38,
   showSurface: true, showStations: true, showWind: true, showHosp: false, selected: null, tIdx: null, tPlaying: false,
   sc: Object.assign({}, SC0), preset: null, scenView: "side", zoom: 1, loaded: false, mapViews: {}, liveFile: null };
-try { const o = JSON.parse(localStorage.getItem("osaka.twin.v5") || "{}"); ["lang", "view", "pol", "area", "basemap", "scenView"].forEach((k) => { if (o[k] != null) state[k] = o[k]; }); if (o.sc) state.sc = Object.assign({}, SC0, o.sc); } catch (e) {}
+try { const o = JSON.parse(localStorage.getItem("osaka.twin.v11") || "{}"); ["lang", "view", "pol", "area", "basemap", "scenView"].forEach((k) => { if (o[k] != null) state[k] = o[k]; }); if (o.sc) state.sc = Object.assign({}, SC0, o.sc); } catch (e) {}
 if (!["live", "blend", "om", "sample"].includes(state.view)) state.view = "blend";
-function save() { try { localStorage.setItem("osaka.twin.v5", JSON.stringify({ lang: state.lang, view: state.view, pol: state.pol, area: state.area, basemap: state.basemap, scenView: state.scenView, sc: state.sc })); } catch (e) {} }
+function save() { try { localStorage.setItem("osaka.twin.v11", JSON.stringify({ lang: state.lang, view: state.view, pol: state.pol, area: state.area, basemap: state.basemap, scenView: state.scenView, sc: state.sc })); } catch (e) {} }
 const tx = (en, ja) => (state.lang === "ja" ? ja : en);
 const tr = (o) => (o == null ? "" : typeof o === "string" ? o : state.lang === "ja" ? (o.ja != null ? o.ja : o.en) : (o.en != null ? o.en : o.ja));
 function esc(s) { return (s == null ? "" : String(s)).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
@@ -68,8 +68,20 @@ const POLS = {
     name: { en: "Nitrogen dioxide (traffic, combustion)", ja: "二酸化窒素（交通・燃焼）" }, note: { en: "Standard: daily mean within or below the 40–60 ppb zone", ja: "環境基準：日平均 0.04〜0.06 ppm のゾーン内又はそれ以下" } },
   ox: { label: "Ox", unit: "ppb", dp: 0, th: [40, 60, 120, 240], std: 60, stdKind: "hour", who: 51,
     name: { en: "Photochemical oxidants (mostly ozone)", ja: "光化学オキシダント（主にオゾン）" }, note: { en: "Standard: hourly ≤ 60 ppb · advisory 120 · warning 240", ja: "環境基準：1時間値 60 ppb 以下・注意報 120・警報 240" } },
+  so2: { label: "SO₂", unit: "ppb", dp: 1, th: [10, 40, 100, 200], std: 40, stdKind: "day", who: 15.3,
+    name: { en: "Sulphur dioxide (ships, industry)", ja: "二酸化硫黄（船舶・工場）" }, note: { en: "Standard: daily mean ≤ 40 ppb, hourly ≤ 100 ppb", ja: "環境基準：日平均 0.04 ppm 以下・1時間値 0.1 ppm 以下" } },
+  co: { label: "CO", unit: "ppm", dp: 1, th: [1, 5, 10, 20], std: 10, stdKind: "day", who: 3.5,
+    name: { en: "Carbon monoxide (combustion, traffic)", ja: "一酸化炭素（燃焼・交通）" }, note: { en: "Standard: daily mean ≤ 10 ppm, 8-hour mean ≤ 20 ppm", ja: "環境基準：日平均 10 ppm 以下・8時間平均 20 ppm 以下" } },
   spm: { label: "SPM", unit: "mg/m³", dp: 3, th: [0.05, 0.10, 0.20, 0.40], std: 0.10, stdKind: "day", who: null,
-    name: { en: "Suspended particles (includes Asian dust)", ja: "浮遊粒子状物質（黄砂を含む）" }, note: { en: "Standard: daily mean ≤ 0.10 mg/m³, hourly ≤ 0.20", ja: "環境基準：日平均 0.10 mg/m³ 以下・1時間値 0.20 以下" } } };
+    name: { en: "Suspended particles (includes Asian dust, kōsa)", ja: "浮遊粒子状物質（黄砂を含む）" }, note: { en: "Standard: daily mean ≤ 0.10 mg/m³, hourly ≤ 0.20", ja: "環境基準：日平均 0.10 mg/m³ 以下・1時間値 0.20 以下" } } };
+const POL_NAMES = {
+  pm25: [{ en: "fine particles", ja: "微小粒子" }, { en: "Fine particulate matter, 2.5 micrometres or smaller (smoke, exhaust, secondary particles)", ja: "微小粒子状物質（粒径2.5µm以下：煙・排気・二次生成粒子）" }],
+  no2: [{ en: "nitrogen dioxide", ja: "二酸化窒素" }, { en: "Nitrogen dioxide — mainly road traffic and combustion", ja: "二酸化窒素 — 主に道路交通・燃焼" }],
+  ox: [{ en: "oxidants", ja: "オキシダント" }, { en: "Photochemical oxidants (primarily ozone) — formed in sunlight; cause of photochemical smog", ja: "光化学オキシダント（主にオゾン）— 日射により生成、光化学スモッグの原因" }],
+  so2: [{ en: "sulphur dioxide", ja: "二酸化硫黄" }, { en: "Sulphur dioxide — ships, port and heavy industry burning sulphur-containing fuel", ja: "二酸化硫黄 — 船舶・港湾・重工業の含硫燃料燃焼" }],
+  co: [{ en: "carbon monoxide", ja: "一酸化炭素" }, { en: "Carbon monoxide — incomplete combustion, mostly vehicles", ja: "一酸化炭素 — 不完全燃焼（主に自動車）" }],
+  spm: [{ en: "suspended particles", ja: "浮遊粒子" }, { en: "Suspended particulate matter, 10 micrometres or smaller — Japan's coarse-particle measure; includes Asian dust (kōsa, 黄砂) blown from continental Asia", ja: "浮遊粒子状物質（粒径10µm以下）— 日本の粗大粒子指標、黄砂を含む" }] };
+Object.keys(POL_NAMES).forEach((k) => { POLS[k].short = POL_NAMES[k][0]; POLS[k].full = POL_NAMES[k][1]; });
 const RAMP = ["#0F9D6B", "#8DBF4A", "#E0A21B", "#E0602A", "#8E2C8E"];
 const BANDN = [{ en: "Good", ja: "良好" }, { en: "Fair", ja: "やや高め" }, { en: "Above standard", ja: "基準超過" }, { en: "High", ja: "高い" }, { en: "Very high", ja: "非常に高い" }];
 const BANDN_OX = [{ en: "Good", ja: "良好" }, { en: "Fair", ja: "やや高め" }, { en: "Above standard", ja: "基準超過" }, { en: "Advisory level", ja: "注意報レベル" }, { en: "Warning level", ja: "警報レベル" }];
@@ -152,45 +164,52 @@ async function loadBundle(dir, live) {
 function liveUsable(l) { if (!l || !Array.isArray(l.stations) || l.stations.filter((s) => s.lat != null).length < 5 || l.mode === "sample") return false; const t = Date.parse(l.observedAt || l.generatedAt || 0); return isFinite(t) && Date.now() - t < 6 * 3600e3; }
 
 /* Open-Meteo (European CAMS model), fetched directly by the browser */
+let OM_CACHE = null, OM_ERR = null;
 async function fetchOM() {
+  if (OM_CACHE && Date.now() - OM_CACHE.at < 25 * 60e3) return OM_CACHE.v;
+  const v = await fetchOMRaw(); if (v) OM_CACHE = { at: Date.now(), v }; else if (OM_CACHE) return OM_CACHE.v; return v;
+}
+async function fetchOMRaw() {
+  OM_ERR = null;
   try {
     const lat = OMPTS.map((p) => p[2]).join(","), lon = OMPTS.map((p) => p[3]).join(",");
     const [a, w] = await Promise.all([
-      fetch("https://air-quality-api.open-meteo.com/v1/air-quality?latitude=" + lat + "&longitude=" + lon + "&hourly=pm2_5,pm10,nitrogen_dioxide,ozone,dust&past_days=7&forecast_days=4&timezone=Asia%2FTokyo"),
+      fetch("https://air-quality-api.open-meteo.com/v1/air-quality?latitude=" + lat + "&longitude=" + lon + "&hourly=pm2_5,pm10,nitrogen_dioxide,ozone,sulphur_dioxide,carbon_monoxide,dust&past_days=7&forecast_days=4&timezone=Asia%2FTokyo"),
       fetch("https://api.open-meteo.com/v1/forecast?latitude=" + lat + "&longitude=" + lon + "&hourly=wind_speed_10m,wind_direction_10m&current=temperature_2m,relative_humidity_2m,wind_speed_10m,wind_direction_10m,precipitation&wind_speed_unit=ms&past_days=7&forecast_days=4&timezone=Asia%2FTokyo")]);
-    if (!a.ok) throw new Error("Open-Meteo HTTP " + a.status);
+    if (!a.ok) { OM_ERR = a.status === 429 ? "rate" : "http"; throw new Error("Open-Meteo HTTP " + a.status); }
     let aq = await a.json(), wx = w.ok ? await w.json() : null; if (!Array.isArray(aq)) aq = [aq]; if (wx && !Array.isArray(wx)) wx = [wx];
     const times = aq[0].hourly.time.map((t) => new Date(t + ":00+09:00").toISOString()), now = Date.now();
     let nowI = 0; times.forEach((t, i) => { if (Date.parse(t) <= now) nowI = i; });
     const h0 = Math.max(0, nowI - 167), histT = times.slice(h0, nowI + 1), st = {}, stations = [], per = [];
     OMPTS.forEach((p, i) => { const h = aq[i] && aq[i].hourly; if (!h) return; const hw = wx && wx[i] && wx[i].hourly;
       const no2 = h.nitrogen_dioxide.map((x) => (x == null ? null : x / 1.88)), ox = h.ozone.map((x, k) => (x == null || no2[k] == null ? null : x / 1.96 + no2[k]));
-      const s = { pm25: h.pm2_5.map(r1), no2: no2.map(r1), ox: ox.map(r1), spm: h.pm10.map((x) => (x == null ? null : Math.round(x) / 1000)), wd: hw ? hw.wind_direction_10m : null, ws: hw ? hw.wind_speed_10m.map(r1) : null };
+      const so2 = (h.sulphur_dioxide || []).map((x) => (x == null ? null : r1(x / 2.62))), co = (h.carbon_monoxide || []).map((x) => (x == null ? null : Math.round(x / 114.5) / 10));
+      const s = { pm25: h.pm2_5.map(r1), no2: no2.map(r1), ox: ox.map(r1), so2, co, spm: h.pm10.map((x) => (x == null ? null : Math.round(x) / 1000)), wd: hw ? hw.wind_direction_10m : null, ws: hw ? hw.wind_speed_10m.map(r1) : null };
       per.push({ p, s, h }); const id = "om-" + i;
-      st[id] = { pm25: s.pm25.slice(h0, nowI + 1), no2: s.no2.slice(h0, nowI + 1), ox: s.ox.slice(h0, nowI + 1), spm: s.spm.slice(h0, nowI + 1) };
+      st[id] = { pm25: s.pm25.slice(h0, nowI + 1), no2: s.no2.slice(h0, nowI + 1), ox: s.ox.slice(h0, nowI + 1), so2: s.so2.slice(h0, nowI + 1), co: s.co.slice(h0, nowI + 1), spm: s.spm.slice(h0, nowI + 1) };
       if (s.wd) { st[id].wd = s.wd.slice(h0, nowI + 1); st[id].ws = s.ws.slice(h0, nowI + 1); }
-      stations.push({ id, name: p[0], nameEn: p[1], city: p[0], address: p[0], type: "モデル点", model: true, lat: p[2], lon: p[3], pm25: s.pm25[nowI], no2: s.no2[nowI], ox: s.ox[nowI], spm: s.spm[nowI], wd: s.wd ? s.wd[nowI] : null, ws: s.ws ? s.ws[nowI] : null, obsTime: times[nowI] }); });
+      stations.push({ id, name: p[0], nameEn: p[1], city: p[0], address: p[0], type: "モデル点", model: true, lat: p[2], lon: p[3], pm25: s.pm25[nowI], no2: s.no2[nowI], ox: s.ox[nowI], so2: s.so2[nowI], co: s.co[nowI], spm: s.spm[nowI], wd: s.wd ? s.wd[nowI] : null, ws: s.ws ? s.ws[nowI] : null, obsTime: times[nowI] }); });
     if (stations.length < 5) throw new Error("too few Open-Meteo points");
     const avgT = (f) => times.map((_, k) => r1(mean(per.map((o) => f(o, k)))));
-    const fc = { source: "Open-Meteo (CAMS)", times, pm25: avgT((o, k) => o.h.pm2_5[k]), pm10: avgT((o, k) => o.h.pm10[k]), dust: avgT((o, k) => o.h.dust[k]), no2ppb: avgT((o, k) => o.s.no2[k]), oxppb: avgT((o, k) => o.s.ox[k]) };
+    const fc = { source: "Open-Meteo (CAMS)", times, pm25: avgT((o, k) => o.h.pm2_5[k]), pm10: avgT((o, k) => o.h.pm10[k]), dust: avgT((o, k) => o.h.dust[k]), no2ppb: avgT((o, k) => o.s.no2[k]), oxppb: avgT((o, k) => o.s.ox[k]), so2ppb: avgT((o, k) => o.s.so2[k]), coppm: times.map((_, k) => { const v = mean(per.map((o) => o.s.co[k])); return v == null ? null : Math.round(v * 100) / 100; }) };
     const wst = wx ? OMPTS.map((p, i) => { const c = wx[i] && wx[i].current; if (!c || i % 3) return null; return { code: i === 0 ? "om-c" : "om" + i, name: p[0], nameEn: p[1], lat: p[2], lon: p[3], temp: c.temperature_2m, hum: c.relative_humidity_2m, ws: r1(c.wind_speed_10m), wd: c.wind_direction_10m, prec: c.precipitation }; }).filter(Boolean) : [];
     return { latest: { generatedAt: new Date().toISOString(), mode: "openmeteo", observedAt: times[nowI], stations, weather: { time: new Date().toISOString(), src: "om", stations: wst }, jmaForecast: null, warnings: null, status: {} }, hist: { times: histT, st }, fc };
-  } catch (e) { console.warn("Open-Meteo", e); return null; }
+  } catch (e) { if (!OM_ERR) OM_ERR = "net"; console.warn("Open-Meteo", e); return null; }
 }
 function mergeBlend(files, om) {
   const [l, h] = files, off = l.stations.filter((s) => s.lat != null);
   const idx = {}; om.hist.times.forEach((t, i) => (idx[t] = i));
   om.latest.stations.forEach((p) => { if (off.some((s) => km(s, p) < 6)) return;
     l.stations.push(Object.assign({}, p, { obsTime: p.obsTime }));
-    const src = om.hist.st[p.id], o = {}; ["pm25", "no2", "ox", "spm", "wd", "ws"].forEach((k) => { if (src[k]) o[k] = h.times.map((t) => { const i = idx[t]; return i == null ? null : src[k][i]; }); }); h.st[p.id] = o; });
+    const src = om.hist.st[p.id], o = {}; ["pm25", "no2", "ox", "so2", "co", "spm", "wd", "ws"].forEach((k) => { if (src[k]) o[k] = h.times.map((t) => { const i = idx[t]; return i == null ? null : src[k][i]; }); }); h.st[p.id] = o; });
   files[2] = om.fc;
   if (!l.weather || !l.weather.stations || !l.weather.stations.length) l.weather = om.latest.weather;
 }
 async function loadData() {
   const v = state.view; let files = null, note = null, modelOnly = false, blend = false, auto = false;
   if (v === "live" || v === "blend") { files = await loadBundle("data/", true); state.liveFile = files[0]; if (!liveUsable(files[0])) files = null; }
-  if (v === "live" && !files) { note = "nolive"; auto = true; }
-  if (v === "om" || (v === "blend" && !files)) { const om = await fetchOM(); if (om) { files = [om.latest, om.hist, om.fc, null]; modelOnly = true; if (v === "blend") note = "blend-om"; } else { note = "omfail"; auto = true; } }
+  if (v === "live" && !files) note = "nolive";
+  if (v === "om" || ((v === "blend" || v === "live") && !files)) { const om = await fetchOM(); if (om) { files = [om.latest, om.hist, om.fc, null]; modelOnly = true; if (v === "blend") note = "blend-om"; } else { note = v === "live" ? "nolive" : "omfail"; auto = true; } }
   else if (v === "blend" && files) { const om = await fetchOM(); files = files.map((x) => (x ? JSON.parse(JSON.stringify(x)) : x)); if (om) { mergeBlend(files, om); blend = true; } else note = "blend-noom"; }
   if (v === "sample" || auto) files = await loadBundle("data/sample/", false);
   if (!files || !files[3] || !files[3].population) { let ctx = null; if (!auto && v !== "sample") { const b = await loadBundle("data/", true); ctx = b[3]; } files = files || [null, null, null, null]; files[3] = ctx && ctx.population ? ctx : BUILTIN_CTX; }
@@ -227,7 +246,7 @@ const sName = (s) => (s.model && state.lang === "en" && s.nameEn ? s.nameEn : s.
 /* ================= VALUES ================= */
 function inArea(s, k) { k = k || state.area; return k === "all" || (s.areas && s.areas.includes(k)); }
 const areaStations = () => D.stations.filter((s) => inArea(s));
-function camsVal(pol, i) { const f = D.fc; if (!f || i == null) return null; const a = pol === "pm25" ? f.pm25 : pol === "no2" ? f.no2ppb : pol === "ox" ? f.oxppb : f.pm10; return a ? a[i] : null; }
+function camsVal(pol, i) { const f = D.fc; if (!f || i == null) return null; const a = pol === "pm25" ? f.pm25 : pol === "no2" ? f.no2ppb : pol === "ox" ? f.oxppb : pol === "so2" ? f.so2ppb : pol === "co" ? f.coppm : f.pm10; return a ? a[i] : null; }
 function corrected(pol, i) { const v = camsVal(pol, i); if (v == null) return null; const vr = verify(pol); if (!vr) return v; if (pol === "spm") return Math.max(0, v * vr.k); return Math.max(0, v - vr.bias); }
 function fcRatio(pol, i) { const a = corrected(pol, i), b = corrected(pol, D.camsNow); if (a == null || !b) return 1; return Math.max(0.2, Math.min(4, a / b)); }
 function valueAt(st, pol, ax) {
@@ -275,8 +294,9 @@ function scenParts(st, pol, sc, p) {
   const g = 1 - sc.green * A_SC.green[pol];
   return { bg: (p.bg + (sc.kosa / 100) * A_SC.kosa[pol]) * g, traffic: traffic * wxk * g, port: port * wxk * g, other: other * wxk * g };
 }
-function scenVal(st, pol, sc, dc) { const base = st[pol]; if (base == null || !sc || pol === "ox") return base; const p = (dc || decomp(pol, null)).get(st.id); if (!p) return base; const r = scenParts(st, pol, sc, p); return Math.max(0, r.bg + r.traffic + r.port + r.other); }
-const scPol = () => (state.pol === "ox" ? "pm25" : state.pol);
+function scenVal(st, pol, sc, dc) { const base = st[pol]; if (base == null || !sc || !SCEN_POLS.includes(pol)) return base; const p = (dc || decomp(pol, null)).get(st.id); if (!p) return base; const r = scenParts(st, pol, sc, p); return Math.max(0, r.bg + r.traffic + r.port + r.other); }
+const SCEN_POLS = ["pm25", "no2", "spm"];
+const scPol = () => (SCEN_POLS.includes(state.pol) ? state.pol : "pm25");
 const hasLevers = (sc) => { sc = sc || state.sc; return !!(sc.ev || sc.heavy || sc.shift || sc.lez || sc.port || sc.green || sc.kosa || sc.wx !== "obs"); };
 
 /* ================= NODES, INTERPOLATION, EXPOSURE ================= */
@@ -285,7 +305,7 @@ function nodesFor(pol, o) { o = o || {}; const list = o.all ? D.stations : areaS
 function idw(ns, lat, lon) { let n = 0, d = 0, mn = 1e9; for (const x of ns) { const dd = Math.hypot((lat - x.st.lat) * 111, (lon - x.st.lon) * 91.3); if (dd < mn) mn = dd; if (dd > 30) continue; const w = 1 / Math.pow(Math.max(dd, 0.4), 2); n += w * x.v; d += w; } return { v: d ? n / d : null, dmin: mn }; }
 function areaAvg(pol, o) { return mean(nodesFor(pol, o).map((x) => x.v)); }
 function metricNodes(pol, sc) { const dc = sc ? decomp(pol, null) : null;
-  return D.stations.map((s) => { let v = stdMetric(s, pol); if (v == null) v = s[pol]; if (v != null && sc && pol !== "ox" && s[pol]) v *= scenVal(s, pol, sc, dc) / s[pol]; return { st: s, v }; }).filter((x) => x.v != null); }
+  return D.stations.map((s) => { let v = stdMetric(s, pol); if (v == null) v = s[pol]; if (v != null && sc && SCEN_POLS.includes(pol) && s[pol]) v *= scenVal(s, pol, sc, dc) / s[pol]; return { st: s, v }; }).filter((x) => x.v != null); }
 function exposure(pol, sc) {
   if (!D.munis.length) return null; const ns = metricNodes(pol, sc); if (!ns.length) return null;
   const std = POLS[pol].std; let pop = 0, ex = 0, wsum = 0; const rows = [];
@@ -346,7 +366,7 @@ const SRC = {
   wikidata: { k: "r", n: { en: "Wikidata — population of each municipality and ward", ja: "Wikidata — 市区町村・区の人口" }, what: { en: "Population with its reference date and centre point", ja: "人口（時点付き）と代表点" }, under: { en: "National census and official estimates as cited in each entry", ja: "国勢調査・推計人口（各項目の出典）" }, url: "query.wikidata.org", who: { en: "Wikidata · CC0", ja: "Wikidata（CC0）" } },
   builtin: { k: "r", n: { en: "Reference figures built into the page", ja: "ページ内蔵の参照値" }, what: { en: "Rounded 2020 census population of 26 municipalities and 7 major hospitals at approximate locations. Used when the collected population and facility files are not available (for example, opened from a desktop)", ja: "26市の2020年国勢調査人口（概数）と主要7病院（概略位置）。収集済みファイルが使えない場合（デスクトップで開いた場合など）に使用" }, under: { en: "National census 2020 (rounded); hospital positions approximate", ja: "2020年国勢調査（概数）・病院位置は概略" }, url: "—", who: { en: "Compiled for this demonstration", ja: "本デモ用に整理" } },
   osm: { k: "r", n: { en: "OpenStreetMap — hospitals and schools", ja: "OpenStreetMap — 病院・学校" }, what: { en: "Location and name of hospitals and schools in Osaka Prefecture", ja: "大阪府内の病院・学校の位置と名称" }, under: { en: "Community-mapped, via the Overpass API; completeness varies", ja: "Overpass API経由のコミュニティデータ（網羅性は場所により異なる）" }, url: "overpass-api.de", who: { en: "© OpenStreetMap contributors, ODbL", ja: "© OpenStreetMap contributors（ODbL）" } },
-  eqs: { k: "r", n: { en: "Environmental Quality Standards for air (Japan)", ja: "大気汚染に係る環境基準" }, what: { en: "The standards each reading is compared against", ja: "各測定値の比較基準" }, under: { en: "PM2.5 daily 35 / annual 15 µg/m³ · NO₂ daily 0.04–0.06 ppm zone · Ox hourly 0.06 ppm · SPM daily 0.10 / hourly 0.20 mg/m³", ja: "PM2.5 日平均35・年平均15 µg/m³／NO₂ 日平均0.04〜0.06 ppm／Ox 1時間値0.06 ppm／SPM 日平均0.10・1時間値0.20 mg/m³" }, url: "env.go.jp/kijun/taiki.html", who: { en: "Ministry of the Environment", ja: "環境省" } },
+  eqs: { k: "r", n: { en: "Environmental Quality Standards for air (Japan)", ja: "大気汚染に係る環境基準" }, what: { en: "The standards each reading is compared against", ja: "各測定値の比較基準" }, under: { en: "PM2.5 daily 35 / annual 15 µg/m³ · NO₂ daily 0.04–0.06 ppm zone · Ox hourly 0.06 ppm · SO₂ daily 0.04 / hourly 0.1 ppm · CO daily 10 / 8-hour 20 ppm · SPM daily 0.10 / hourly 0.20 mg/m³", ja: "PM2.5 日平均35・年平均15 µg/m³／NO₂ 日平均0.04〜0.06 ppm／Ox 1時間値0.06 ppm／SPM 日平均0.10・1時間値0.20 mg/m³" }, url: "env.go.jp/kijun/taiki.html", who: { en: "Ministry of the Environment", ja: "環境省" } },
   alerts: { k: "r", n: { en: "Alert thresholds in Japanese rules", ja: "注意報・注意喚起の基準" }, what: { en: "Photochemical smog advisory at Ox 0.12 ppm; PM2.5 alert guideline daily mean 70 µg/m³ (5–7 am average above 85)", ja: "光化学スモッグ注意報 Ox 0.12 ppm／PM2.5注意喚起 日平均70 µg/m³（午前5〜7時平均85超）" }, under: { en: "Warning level 0.24 ppm set by prefectures", ja: "警報0.24 ppmは都道府県が設定" }, url: "env.go.jp", who: { en: "Ministry of the Environment · Osaka Prefecture", ja: "環境省・大阪府" } },
   who: { k: "r", n: { en: "WHO Global Air Quality Guidelines 2021", ja: "WHO 大気質ガイドライン 2021" }, what: { en: "Health guideline values for comparison", ja: "比較用の健康ガイドライン値" }, under: { en: "PM2.5 24-hour 15 µg/m³ · NO₂ 24-hour 25 µg/m³ (≈13 ppb) · ozone 8-hour 100 µg/m³ (≈51 ppb)", ja: "PM2.5 24時間15 µg/m³／NO₂ 24時間25 µg/m³（約13 ppb）／オゾン8時間100 µg/m³（約51 ppb）" }, url: "who.int", who: { en: "World Health Organization", ja: "世界保健機関" } },
   leaflet: { k: "r", n: { en: "Leaflet 1.9.4", ja: "Leaflet 1.9.4" }, what: { en: "Draws the interactive maps", ja: "対話型地図の描画" }, under: { en: "Open-source mapping library", ja: "オープンソース地図ライブラリ" }, url: "unpkg.com/leaflet", who: { en: "BSD-2-Clause", ja: "BSD-2-Clause" } },
@@ -381,7 +401,7 @@ const ASM = {
   map: () => [tx("The map between points is estimated", "地点間の地図は推計値"), tx("Between measurement points each location is a distance-weighted average of nearby points. Nothing is drawn more than 10 km from a point.", "地点の間の各場所は近隣地点の距離加重平均です。地点から10km以上離れた場所は表示しません。"), tx("inverse distance², ≤10 km", "距離の2乗逆数・10km以内")],
   prelim: () => [tx("Official values are preliminary", "公式値は速報値"), tx("Stations publish preliminary hourly values that may be corrected later.", "測定局の1時間値は速報値で、後日修正される場合があります。"), "速報値"],
   levels: () => [tx("Colour levels are anchored on the standards", "色分けは環境基準に準拠"), tx("For PM2.5, NO₂ and SPM the standard is a daily mean, so colouring a single hour against it is indicative only.", "PM2.5・NO₂・SPMの基準は日平均値のため、1時間値の色分けは目安です。"), "EQS"],
-  units: () => [tx("Unit conversions", "単位換算"), tx("Official gases (ppm) are shown in ppb (×1,000). Model µg/m³ are converted to ppb at 25 °C (NO₂ ÷1.88, ozone ÷1.96).", "公式のガス濃度（ppm）はppb（×1,000）で表示。モデルのµg/m³は25℃換算でppbに変換（NO₂÷1.88、オゾン÷1.96）。"), "ppm→ppb"],
+  units: () => [tx("Unit conversions", "単位換算"), tx("Official gases (ppm) are shown in ppb (×1,000). Model µg/m³ are converted at 25 °C (NO₂ ÷1.88, ozone ÷1.96, SO₂ ÷2.62 to ppb; CO ÷1145 to ppm).", "公式のガス濃度（ppm）はppb（×1,000）で表示。モデルのµg/m³は25℃換算でppbに変換（NO₂÷1.88、オゾン÷1.96）。"), "ppm→ppb"],
   bg: () => [tx("Regional background is the cleanest tenth of general points", "広域バックグラウンド＝一般地点の下位10%"), tx("The regional level is the 10th percentile of general (non-roadside) points at that hour.", "広域レベルはその時刻の一般（非沿道）地点の10パーセンタイル値です。"), tx("10th percentile", "10パーセンタイル")],
   road: () => [tx("Roadside increment uses the nearest general stations", "沿道寄与は最寄り一般局との差"), tx("A roadside station's extra over the two nearest general stations within 6 km is attributed to the road.", "自排局のうち6km以内の最寄り一般局2局の平均を上回る分を道路の寄与とみなします。"), tx("2 stations, ≤6 km", "2局・6km以内")],
   pop: () => [tx("People are counted where they live, at the municipal centre", "人口は常住地・代表点で集計"), tx("Daytime movement (commuting into central Osaka) is not modelled.", "昼間の人口移動は反映していません。"), tx("residence-based", "常住地ベース")] };
@@ -434,6 +454,7 @@ function mountMaps() {
     m._scope = scope; m._cfg = cfg; m.createPane("surf").style.zIndex = 350; m.getPane("surf").style.pointerEvents = "none"; m.createPane("zone").style.zIndex = 420; m.createPane("pts").style.zIndex = 460;
     setBase(m); m._surf = surfaceLayer(); m._surf.addTo(m); m._lay = L.layerGroup().addTo(m);
     const v = state.mapViews[scope]; if (v && !cfg.refit) m.setView(v.c, v.z, { animate: false }); else m.fitBounds(cfg.bounds || areaBounds(), { padding: [10, 10], animate: false });
+    { const k = document.createElement("div"); k.className = "mapkeywrap"; k.innerHTML = shapeKey(true, cfg); L.DomEvent && L.DomEvent.disableClickPropagation && L.DomEvent.disableClickPropagation(k); el.appendChild(k); }
     drawLayers(m); MAPS.push(m); made[scope] = m; setTimeout(() => { try { m.invalidateSize(); m._surf.draw(); } catch (e) {} }, 80); });
   if (made.base && made.scen) { let lock = false; const sync = (a, b) => a.on("move", () => { if (lock) return; lock = true; b.setView(a.getCenter(), a.getZoom(), { animate: false }); lock = false; }); sync(made.base, made.scen); sync(made.scen, made.base); }
 }
@@ -454,17 +475,38 @@ function drawLayers(m) {
   else ns = cfg.metric ? metricNodes(pol, null) : nodesFor(pol, { all: true, ax: cfg.ax, sc: cfg.sc ? state.sc : null });
   ns.forEach((x, i) => { const s = x.st, col = x.d ? deltaCol(x.v) : bandOf(pol, x.v).hex, lab = x.d ? (x.v > 0 ? "+" : "") + x.v.toFixed(0) + "%" : fmt(pol, x.v);
     const cls = "stn" + (s.road ? " road" : "") + (s.model ? " model" : "") + (inArea(s) ? "" : " dim") + (state.selected === s.id ? " sel" : "");
-    const html = '<div class="' + cls + '" style="--rc:' + col + ";--pd:" + ((i % 9) * .25).toFixed(2) + 's">' + (inArea(s) && !x.d && i % 2 === 0 ? '<span class="ring"></span>' : "") + '<span class="core"><span class="lab"' + (x.d && Math.abs(x.v) < 1 ? ' style="color:#3C4250;text-shadow:none"' : "") + ">" + lab + "</span></span></div>";
+    const html = '<div class="' + cls + '" style="--rc:' + col + ";--pd:" + ((i % 9) * .25).toFixed(2) + 's">' + (inArea(s) && !x.d && isLiveStn(s) ? '<span class="ring"></span><span class="ring r2"></span>' : "") + '<span class="core"><span class="lab"' + (x.d && Math.abs(x.v) < 1 ? ' style="color:#3C4250;text-shadow:none"' : "") + ">" + lab + "</span></span></div>";
     const mk = L.marker([s.lat, s.lon], { pane: "pts", icon: L.divIcon({ className: "", iconSize: [0, 0], html }) });
     mk.bindTooltip("<b>" + esc(sName(s)) + "</b><br>" + esc(tr(s.muni)) + " · " + typeLabel(s) + "<br>" + POLS[pol].label + ": <b>" + lab + (x.d ? "" : " " + U(pol)) + "</b>" + (s.obsTime ? "<br><span style='font-size:10px'>" + fmtT(s.obsTime) + "</span>" : ""));
     mk.on("click", () => { state.selected = s.id; state.screen = "hotspot"; render(); window.scrollTo(0, 0); }); g.addLayer(mk); });
 }
 function typeLabel(s) { return s.model ? tx("Model point (Open-Meteo)", "モデル点（Open-Meteo）") : s.road ? tx("Roadside", "自排局") : tx("General", "一般局"); }
+function isLiveStn(s) { return !s.model && !isSample() && !D.modelOnly && !(D.latest && D.latest.stale); }
+function shapeKey(onMap, cfg) {
+  cfg = cfg || {};
+  const hasRoad = D.stations.some((s) => s.road), hasModel = D.stations.some((s) => s.model), hasGen = D.stations.some((s) => !s.road && !s.model);
+  const it = (cls, lab, tip) => '<span class="sk" title="' + esc(tip) + '"><i class="skm ' + cls + '"></i>' + lab + "</span>";
+  const wind = onMap && !cfg.delta && (cfg.wind != null ? cfg.wind : state.showWind) && D.amedas.some((a) => a.ws != null);
+  const hosp = onMap && (cfg.hosp || state.showHosp) && D.hosp.length;
+  const lez = onMap && (cfg.lez || ((cfg.sc || cfg.delta) && state.sc.lez));
+  return '<span class="shapekey' + (onMap ? " onmap" : "") + '">' + (onMap ? '<b class="skt">' + tx("Map key", "凡例") + "</b>" : "")
+    + (hasGen ? it("gen", tx("General station", "一般局"), tx("Neighbourhood air, away from busy roads", "生活環境の大気（幹線道路から離れた地点）")) : "")
+    + (hasRoad ? it("road", tx("Roadside station", "自排局"), tx("Next to major roads; reads higher for traffic pollution", "幹線道路沿い。交通由来の汚染が高めに出る")) : "")
+    + (hasModel ? it("model", tx("Model point (Open-Meteo)", "モデル点（Open-Meteo）"), tx("European model estimate at a town or ward centre, not a station", "市区町村代表点の欧州モデル推計（測定局ではない）")) : "")
+    + (D.stations.some(isLiveStn) ? it("live", tx("Pulsing = live measurement", "点滅＝ライブ実測"), tx("Official station reporting live readings", "ライブで報告中の公的測定局")) : "")
+    + (wind ? it("wind", tx("Wind arrow (m/s)", "風向・風速（m/s）"), tx("Arrow points where the wind blows to; number is speed in metres per second; small circle = calm", "矢印は風が吹いていく方向、数字は風速（m/s）、小円は静穏")) : "")
+    + (hosp ? it("hosp", tx("Hospital", "病院"), tx("Hospital location; hover for the estimated level there", "病院の位置。カーソルで推計値を表示")) : "")
+    + (lez ? it("lez", tx("Low emission zone (LEZ)", "低排出ゾーン"), tx("Red line = Umeda–Namba axis; dashed circle = 3 km area where the LEZ effect applies", "赤線＝梅田〜難波軸、破線円＝効果が及ぶ3km圏")) : "")
+    + (onMap && cfg.showBox ? it("box", tx("Selected zoom area", "選択中の範囲"), tx("Dashed box shows the area of the selected zoom level", "破線枠は選択中の空間スケールの範囲")) : "")
+    + (onMap && cfg.delta ? "" : onMap ? '<span class="sk muted" title="' + esc(tx("Marker colour shows the level against Japan's standard; see the legend below the map", "マーカーの色は環境基準に対するレベル。地図下の凡例を参照")) + '">' + tx("Colour = level", "色＝濃度レベル") + "</span>" : "")
+    + (onMap && state.showSurface && !cfg.delta ? '<span class="sk muted" title="' + esc(tx("Soft colour between markers is an estimate from nearby points (not measured)", "マーカー間の淡い色は近隣地点からの推計（実測ではない）")) + '">' + tx("Shading = estimate", "淡色＝推計") + "</span>" : "")
+    + "</span>";
+}
 function mapLegend(pol, extra) { pol = pol || state.pol; const p = POLS[pol], t = p.th;
   const r = ["≤ " + t[0], t[0] + "–" + t[1], t[1] + "–" + t[2], t[2] + "–" + t[3], "> " + t[3]];
-  return '<div class="maplegend">' + RAMP.map((c, i) => '<span><i style="background:' + c + '"></i>' + tr((pol === "ox" ? BANDN_OX : BANDN)[i]) + " (" + r[i] + ")</span>").join("") + '<span class="muted">' + U(pol) + "</span>" + (D.blend ? '<span class="muted">' + tx("dashed = Open-Meteo model point", "破線＝Open-Meteoモデル点") + "</span>" : "") + (extra || "") + '<span style="margin-left:auto" class="muted">' + tr(p.note) + "</span></div>"; }
-function baseSelect() { return '<span class="basesel">' + icon("layers") + '<select data-act="base" title="' + tx("Background map", "背景地図") + '">' + BASE_GROUPS.map((g) => '<optgroup label="' + tr(g.n) + '">' + g.k.map((k) => '<option value="' + k + '"' + (state.basemap === k ? " selected" : "") + ">" + tr(BASEMAPS[k]) + "</option>").join("") + "</optgroup>").join("") + "</select></span>"; }
+  return '<div class="maplegend">' + shapeKey(false) + '<span class="sksep"></span>' + RAMP.map((c, i) => '<span><i style="background:' + c + '"></i>' + tr((pol === "ox" ? BANDN_OX : BANDN)[i]) + " (" + r[i] + ")</span>").join("") + '<span class="muted">' + U(pol) + "</span>" + (extra || "") + '<span style="margin-left:auto" class="muted">' + tr(p.note) + "</span></div>"; }
 const BASE_GROUPS = [{ n: { en: "Esri", ja: "Esri" }, k: ["esri", "esritopo", "esrigray", "esristreet"] }, { n: { en: "GSI (Japan)", ja: "国土地理院" }, k: ["pale", "std", "photo"] }, { n: { en: "Other", ja: "その他" }, k: ["carto"] }];
+function baseSelect() { return '<span class="basesel">' + icon("layers") + '<select data-act="base" title="' + tx("Background map", "背景地図") + '">' + BASE_GROUPS.map((g) => '<optgroup label="' + tr(g.n) + '">' + g.k.map((k) => '<option value="' + k + '"' + (state.basemap === k ? " selected" : "") + ">" + tr(BASEMAPS[k]) + "</option>").join("") + "</optgroup>").join("") + "</select></span>"; }
 function mapBar(opts) { opts = opts || {}; const chip = (k, l) => '<button class="mapchip' + (state[k] ? " on" : "") + '" data-act="tog" data-k="' + k + '">' + l + "</button>";
   return '<div class="mapbar no-print">' + chip("showSurface", tx("Shading between points", "地点間の推計")) + chip("showStations", D.modelOnly ? tx("Model points", "モデル点") : tx("Stations", "測定局")) + chip("showWind", tx("Wind", "風") + " (" + WXS() + ")") + (D.hosp.length ? chip("showHosp", tx("Hospitals", "病院")) : "") + (opts.extra || "") + baseSelect() + "</div>"; }
 function basePicker() { return '<div class="card pad no-print" style="margin-top:14px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:14px 18px"><label style="font-size:12.5px;font-weight:600;color:var(--ink-2)">' + icon("layers") + " " + tx("Background map", "背景地図") + "</label>"
@@ -510,7 +552,7 @@ const GROUPS = { see: [{ en: "See", ja: "見る" }, { en: "What the air is doing
   pre: [{ en: "Predict", ja: "予測する" }, { en: "What happens next", ja: "これから" }], test: [{ en: "Test", ja: "検証する" }, { en: "Try measures before acting", ja: "施策を事前に試す" }], act: [{ en: "Act", ja: "行動する" }, { en: "Decide, and show why", ja: "判断と説明" }] };
 const SCREENS = [{ id: "home", g: "see", n: { en: "Overview", ja: "概要" }, ic: "globe" }, { id: "live", g: "see", n: { en: "Live Map", ja: "ライブマップ" }, ic: "map" }, { id: "time", g: "see", n: { en: "Through the Week", ja: "1週間の推移" }, ic: "clock" },
   { id: "attrib", g: "und", n: { en: "What Drives It", ja: "汚染の要因" }, ic: "search" }, { id: "hotspot", g: "und", n: { en: "Hotspots", ja: "ホットスポット" }, ic: "target" }, { id: "exposure", g: "und", n: { en: "Who Breathes It", ja: "影響を受ける人口" }, ic: "users" },
-  { id: "forecast", g: "pre", n: { en: "Next 3 Days", ja: "3日間の見通し" }, ic: "trend" }, { id: "episodes", g: "pre", n: { en: "Smog & Asian Dust", ja: "光化学スモッグ・黄砂" }, ic: "sun" },
+  { id: "forecast", g: "pre", n: { en: "Next 3 Days", ja: "3日間の見通し" }, ic: "trend" }, { id: "episodes", g: "pre", n: { en: "Smog & Asian Dust (Kōsa)", ja: "光化学スモッグ・黄砂" }, ic: "sun" },
   { id: "scen", g: "test", n: { en: "Scenario Analysis", ja: "シナリオ分析" }, ic: "beaker" }, { id: "compare", g: "test", n: { en: "Compare Packages", ja: "施策パッケージ比較" }, ic: "scales" }, { id: "zoom", g: "test", n: { en: "Zoom Levels", ja: "空間スケール" }, ic: "layers" },
   { id: "alerts", g: "act", n: { en: "Alerts", ja: "アラート" }, ic: "bell" }, { id: "kpi", g: "act", n: { en: "Measuring Success", ja: "成果の測り方" }, ic: "gauge" }, { id: "brief", g: "act", n: { en: "Executive Brief", ja: "エグゼクティブ・ブリーフ" }, ic: "file" }, { id: "method", g: "act", n: { en: "Data & Method", ja: "データと手法" }, ic: "database" }];
 function badge() {
@@ -545,7 +587,7 @@ function render() {
     + '<div class="selwrap">' + icon("pin") + "<label>" + tx("Area", "エリア") + '</label><select data-act="area">' + AREAS.map((a) => '<option value="' + a.k + '"' + (state.area === a.k ? " selected" : "") + ">" + tr(a) + "</option>").join("") + "</select></div>"
     + '<div class="seg" title="' + tx("Which data the twin is using", "使用データ") + '">' + VIEWS.map((v) => '<button class="' + (state.view === v.k ? "on" : "") + '" data-act="view" data-v="' + v.k + '" title="' + esc(tr(v.d)) + '">' + icon(v.ic) + tr(v.n) + "</button>").join("") + "</div>"
     + badge() + '<div class="spacer"></div>'
-    + '<div class="polsel">' + Object.keys(POLS).map((k) => '<button class="' + (state.pol === k ? "on" : "") + '" data-act="pol" data-p="' + k + '" title="' + esc(tr(POLS[k].name)) + '">' + POLS[k].label + "</button>").join("") + "</div>"
+    + '<div class="polwrap"><div class="polsel">' + Object.keys(POLS).map((k) => '<button class="' + (state.pol === k ? "on" : "") + '" data-act="pol" data-p="' + k + '" title="' + esc(tr(POLS[k].full)) + '">' + POLS[k].label + "<small>" + tr(POLS[k].short) + "</small></button>").join("") + '</div><div class="polfull"><b>' + POLS[state.pol].label + "</b> — " + tr(POLS[state.pol].full) + "</div></div>"
     + '<button class="btn sm" data-act="refresh">' + icon("refresh") + tx("Refresh", "更新") + "</button>"
     + '</header><main class="main">' + body() + "</main></div>";
   mountMaps();
@@ -555,9 +597,9 @@ function head(t, s) { const cur = SCREENS.find((x) => x.id === state.screen);
     + '<div class="eyebrow">' + tr(cur.n) + " · " + esc(areaName()) + '</div><h1 class="h-page">' + t + '</h1><p class="sub" style="margin-bottom:18px">' + s + "</p>" + modeBanner(); }
 function modeBanner() {
   const n = state.note, desk = IS_FILE ? tx(" (the page is opened from a desktop file, so the collected official files cannot be read)", "（デスクトップ上のファイルとして開かれているため、収集済みの公式ファイルを読み込めません）") : tx(" (no recent collection run yet)", "（最近のデータ収集がまだありません）");
-  if (n === "nolive") return '<div class="callout warn" style="margin-bottom:16px">' + icon("flask") + " <b>" + tx("Official data is not available here", "ここでは公式データを利用できません") + "</b>" + desk + (IS_FILE ? tx(". Showing the sample. Choose <b>Blended</b> or <b>Open-Meteo</b> for live data on a desktop.", "。サンプルを表示中。デスクトップでライブデータを見るには<b>ブレンド</b>または<b>Open-Meteo</b>を選択してください。") : tx(". Showing the sample. Check the latest run on the GitHub <b>Actions</b> tab, or choose <b>Blended</b> or <b>Open-Meteo</b> for live model data meanwhile.", "。サンプルを表示中。GitHubの<b>Actions</b>タブで最新の実行結果を確認するか、当面は<b>ブレンド</b>または<b>Open-Meteo</b>を選択してください。")) + "</div>";
+  if (n === "nolive") return '<div class="callout warn" style="margin-bottom:16px">' + icon("alert") + " <b>" + tx("Official station data is not available here", "ここでは公的測定局のデータを利用できません") + "</b>" + desk + (state.autoSample ? tx(". Open-Meteo could not be reached either, so the sample is shown.", "。Open-Meteoにも接続できないため、サンプルを表示しています。") : tx(". Showing live <b>Open-Meteo European model</b> data instead.", "。代わりに<b>Open-Meteo欧州モデル</b>のライブデータを表示しています。")) + " " + (IS_FILE ? tx("Japan's official readings need the collector to run — on GitHub, or on this computer.", "日本の公式測定値を表示するには、収集処理の実行（GitHubまたはこのPC上）が必要です。") : tx("Check the latest run on the GitHub <b>Actions</b> tab.", "GitHubの<b>Actions</b>タブで最新の実行結果を確認してください。")) + "</div>";
   if (n === "blend-om") return '<div class="callout info" style="margin-bottom:16px">' + icon("merge") + " <b>" + tx("Blended — official data not available here", "ブレンド — ここでは公式データを利用できません") + "</b>" + desk + (IS_FILE ? tx(", so this shows the Open-Meteo European model only. Deploy to GitHub to add Japan's official station measurements.", "。このためOpen-Meteo欧州モデルのみを表示しています。GitHubにデプロイすると日本の公的測定局の実測値が加わります。") : tx(", so this shows the Open-Meteo European model only. Official stations will be added automatically once the GitHub collection run succeeds (see the Actions tab).", "。このためOpen-Meteo欧州モデルのみを表示しています。GitHubのデータ収集が成功すると公的測定局が自動的に加わります（Actionsタブ参照）。")) + "</div>";
-  if (n === "omfail") return '<div class="callout warn" style="margin-bottom:16px">' + icon("alert") + " " + tx("Open-Meteo could not be reached from this network. Showing the sample.", "このネットワークからOpen-Meteoに接続できませんでした。サンプルを表示中。") + "</div>";
+  if (n === "omfail") return '<div class="callout warn" style="margin-bottom:16px">' + icon("alert") + " " + (OM_ERR === "rate" ? tx("Open-Meteo's free daily limit has been reached for this network. Showing the sample; try again later.", "このネットワークでOpen-Meteoの無料利用上限に達しました。サンプルを表示中です。しばらくしてから再試行してください。") : tx("Open-Meteo could not be reached from this network. Showing the sample.", "このネットワークからOpen-Meteoに接続できませんでした。サンプルを表示中。")) + "</div>";
   if (n === "blend-noom") return '<div class="callout info" style="margin-bottom:16px">' + icon("info") + " " + tx("Open-Meteo could not be reached, so Blended shows official data only.", "Open-Meteoに接続できないため、ブレンドは公式データのみです。") + "</div>";
   const mk = modeKind();
   if (mk === "sample") return '<div class="callout" style="margin-bottom:16px">' + icon("flask") + " <b>" + tx("Sample snapshot — every value is invented.", "サンプル — すべての値は作成値です。") + "</b></div>";
@@ -578,7 +620,7 @@ document.addEventListener("click", (e) => {
   else if (a === "pol") { state.pol = t.dataset.p; save(); render(); }
   else if (a === "lang") { state.lang = t.dataset.l; save(); if (state.loaded) prepare(); render(); }
   else if (a === "view") { if (state.view === t.dataset.v) return; state.view = t.dataset.v; save(); state.loaded = false; state.tIdx = null; render(); loadData().then(() => { state.mapViews = {}; render(); }); }
-  else if (a === "refresh") { loadData().then(() => { render(); toast(tx("Data refreshed", "データを更新しました")); }); }
+  else if (a === "refresh") { OM_CACHE = null; loadData().then(() => { render(); toast(tx("Data refreshed", "データを更新しました")); }); }
   else if (a === "tog") { state[t.dataset.k] = !state[t.dataset.k]; render(); }
   else if (a === "areaset") { state.area = t.dataset.v; state.mapViews = {}; save(); render(); }
   else if (a === "pick") { state.selected = t.dataset.s; if (t.dataset.go) state.screen = t.dataset.go; render(); if (t.dataset.go) window.scrollTo(0, 0); }
@@ -595,5 +637,5 @@ document.addEventListener("input", (e) => { const t = e.target.closest("[data-ac
 function stopPlay() { state.tPlaying = false; if (_play) { clearInterval(_play); _play = null; } }
 
 /* ================= START ================= */
-async function boot() { render(); await loadData(); render(); setInterval(() => { if (isSample() || state.tPlaying) return; const g = D.latest && D.latest.observedAt; loadData().then(() => { if ((D.latest && D.latest.observedAt) !== g) { render(); toast(tx("New live data loaded", "新しいライブデータを読み込みました")); } }); }, 10 * 60e3); }
+async function boot() { render(); await loadData(); render(); setInterval(() => { if (isSample() || state.tPlaying) return; const g = D.latest && D.latest.observedAt; loadData().then(() => { if ((D.latest && D.latest.observedAt) !== g) { render(); toast(tx("New live data loaded", "新しいライブデータを読み込みました")); } }); }, 30 * 60e3); }
 if (window.__leafletReady) boot(); else window.addEventListener("leaflet-done", boot, { once: true });
